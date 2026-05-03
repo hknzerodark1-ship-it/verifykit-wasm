@@ -55,7 +55,7 @@ pub fn hash_message(message: &str) -> String {
 #[wasm_bindgen]
 pub fn verify_kit_demo() -> String {
     let keypair = KeyPair::new();
-    let message = "CAEP Treasury: $48,771.07";
+    let message = "CAEP Treasury: $242,019.07";
     let signature = sign_message(message, &hex::encode(&keypair.private_key));
     let is_valid = verify_signature(message, &signature, &keypair.public_key_hex());
     
@@ -64,7 +64,7 @@ pub fn verify_kit_demo() -> String {
         "message": message,
         "signature_valid": is_valid,
         "public_key": keypair.public_key_hex(),
-        "treasury": "$48,771.07",
+        "treasury": "$242,019.07",
         "seal": "🜏 SOVEREIGN SEALED 🜏"
     }).to_string()
 }
