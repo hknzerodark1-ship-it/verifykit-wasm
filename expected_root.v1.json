@@ -1,0 +1,6 @@
+{
+  "version": "v1",
+  "algo": "blake3",
+  "root": "ebcc8161deadbeefcafebabe1234567890abcdef1234567890abcdef12345678",
+  "policy": "canonical-encoding-v1"
+}

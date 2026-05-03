@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CAEP Merkle Proof Explorer</title>
+    <style>
+        body { background: #0a0a0f; color: #00ff41; font-family: monospace; padding: 2rem; }
+        .leaf { background: #1a1a2a; margin: 0.5rem; padding: 0.5rem; border-left: 3px solid #00ff41; }
+        .node { background: #0f1a0f; margin: 0.5rem; padding: 0.5rem; border-left: 3px solid #ffaa00; }
+        .root { background: #0a1a0a; padding: 1rem; border: 2px solid #00ff41; text-align: center; }
+        .hash { font-family: monospace; font-size: 0.7rem; color: #88ff88; word-break: break-all; }
+        .tree { margin: 2rem 0; padding: 1rem; background: #0a0a0a; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>🜏 CAEP Merkle Proof Explorer</h1>
+    <div id="drop-zone" style="border:2px dashed #00ff41; padding:2rem; text-align:center; cursor:pointer">
+        📁 Drop CAEP JSON file
+    </div>
+    <div id="tree" class="tree"></div>
+    <div id="root" class="root"></div>
+    <script type="module">
+        import init, { hash_payload, merkle_root, canonicalize } from './pkg/verifykit_wasm.js';
+        
+        async function renderTree(claims) {
+            const treeDiv = document.getElementById('tree');
+            treeDiv.innerHTML = '<h2>🌲 Merkle Tree</h2>';
+            
+            // Leaves
+            const leaves = [];
+            for (let i = 0; i < claims.length; i++) {
+                const c = claims[i];
+                const payloadBytes = new TextEncoder().encode(c.payload);
+                const hash = await hash_payload(payloadBytes);
+                const hashHex = Array.from(hash).map(b => b.toString(16).padStart(2,'0')).join('');
+                leaves.push(hashHex);
+                treeDiv.innerHTML += `<div class="leaf">
+                    📄 Leaf ${i}: ${c.id}<br>
+                    <span class="hash">${hashHex.substring(0, 48)}...</span>
+                </div>`;
+            }
+            
+            // Build Merkle tree
+            let level = [...leaves];
+            let levelNum = 1;
+            while (level.length > 1) {
+                const next = [];
+                for (let i = 0; i < level.length; i += 2) {
+                    const left = level[i];
+                    const right = i + 1 < level.length ? level[i + 1] : left;
+                    const combined = left + right;
+                    const combinedBytes = new TextEncoder().encode(combined);
+                    const nodeHash = await hash_payload(combinedBytes);
+                    const nodeHex = Array.from(nodeHash).map(b => b.toString(16).padStart(2,'0')).join('');
+                    next.push(nodeHex);
+                    treeDiv.innerHTML += `<div class="node">
+                        🔷 Level ${levelNum}: H(${left.substring(0,16)}... + ${right.substring(0,16)}...)<br>
+                        <span class="hash">${nodeHex.substring(0, 48)}...</span>
+                    </div>`;
+                }
+                level = next;
+                levelNum++;
+            }
+            
+            const rootDiv = document.getElementById('root');
+            rootDiv.innerHTML = `<h2>🜏 ROOT HASH</h2>
+                <div class="hash">${level[0]}</div>
+                <div>✅ Verified – ${claims.length} claims → 1 root</div>`;
+        }
+        
+        async function loadCAEP(file) {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            await renderTree(data.claims);
+        }
+        
+        await init();
+        const zone = document.getElementById('drop-zone');
+        zone.ondragover = e => e.preventDefault();
+        zone.ondrop = async e => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            await loadCAEP(file);
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+Error: `cargo metadata` exited with an error: error: failed to parse manifest at `/data/data/com.termux/files/home/citadel/Cargo.toml`
+
+Caused by:
+  manifest is missing either a `[package]` or a `[workspace]`
+
+Caused by: `cargo metadata` exited with an error: error: failed to parse manifest at `/data/data/com.termux/files/home/citadel/Cargo.toml`
+
+Caused by:
+  manifest is missing either a `[package]` or a `[workspace]`
+
