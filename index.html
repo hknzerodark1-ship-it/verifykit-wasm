@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VerifyKit | CAEP v1 Verifier</title>
+    <style>
+        body { background: #0a0a0a; color: #00ff41; font-family: monospace; padding: 20px; }
+        #drop-zone { border: 2px dashed #00ff41; padding: 40px; text-align: center; cursor: pointer; }
+        .valid { color: #00ff41; }
+        .invalid { color: #ff003c; }
+    </style>
+</head>
+<body>
+    <h1>🜏 VerifyKit — CAEP v1 Sovereign Verifier</h1>
+    <div id="drop-zone">Drag & drop CAEP JSON file here</div>
+    <pre id="output">Awaiting verification...</pre>
+    <script type="module">
+        import init, { verify_caep_json } from './pkg/verifykit_wasm.js';
+        async function run() {
+            await init();
+            const zone = document.getElementById('drop-zone');
+            const output = document.getElementById('output');
+            zone.ondragover = (e) => e.preventDefault();
+            zone.ondrop = async (e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                const text = await file.text();
+                const isValid = verify_caep_json(text);
+                output.innerHTML = isValid ? '✅ VALID: Merkle root matches' : '❌ INVALID: Tamper detected';
+                output.className = isValid ? 'valid' : 'invalid';
+            };
+        }
+        run();
+    </script>
+</body>
+</html>
