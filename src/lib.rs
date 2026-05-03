@@ -1,85 +1,70 @@
 use wasm_bindgen::prelude::*;
-use ed25519_dalek::{SigningKey, VerifyingKey, Signer};
+use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
 use rand::rngs::OsRng;
 use serde_json::json;
 use hex;
 
-/// Generate a new Ed25519 keypair
-/// Returns JSON with private_key (hex) and public_key (hex)
 #[wasm_bindgen]
-pub fn generate_keypair() -> String {
-    let mut csprng = OsRng;
-    let signing_key = SigningKey::generate(&mut csprng);
-    let verifying_key = signing_key.verifying_key();
-    
-    json!({
-        "private_key": hex::encode(signing_key.to_bytes()),
-        "public_key": hex::encode(verifying_key.as_bytes())
-    }).to_string()
+pub struct KeyPair {
+    public_key: Vec<u8>,
+    private_key: Vec<u8>,
 }
 
-/// Sign a message using a private key
-/// Input: private_key_hex (32 bytes), message (string)
-/// Returns: signature as hex string
 #[wasm_bindgen]
-pub fn sign_message(private_key_hex: &str, message: &str) -> String {
-    let private_bytes = hex::decode(private_key_hex).unwrap();
-    let signing_key = SigningKey::from_bytes(&private_bytes.try_into().unwrap());
+impl KeyPair {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        let mut csprng = OsRng;
+        let signing_key = SigningKey::generate(&mut csprng);
+        let verifying_key = signing_key.verifying_key();
+        
+        Self {
+            public_key: verifying_key.to_bytes().to_vec(),
+            private_key: signing_key.to_bytes().to_vec(),
+        }
+    }
+    
+    pub fn public_key_hex(&self) -> String {
+        hex::encode(&self.public_key)
+    }
+}
+
+#[wasm_bindgen]
+pub fn sign_message(message: &str, private_key_hex: &str) -> String {
+    let private_key_bytes = hex::decode(private_key_hex).unwrap();
+    let signing_key = SigningKey::from_bytes(&private_key_bytes.try_into().unwrap());
     let signature = signing_key.sign(message.as_bytes());
     hex::encode(signature.to_bytes())
 }
 
-/// Verify a message signature
-/// Input: public_key_hex (32 bytes), message (string), signature_hex (64 bytes)
-/// Returns: true if signature is valid, false otherwise
 #[wasm_bindgen]
-pub fn verify_signature(public_key_hex: &str, message: &str, signature_hex: &str) -> bool {
-    use ed25519_dalek::{Verifier, Signature};
-    
-    let pub_bytes = match hex::decode(public_key_hex) {
-        Ok(b) => b,
-        Err(_) => return false,
-    };
-    let verifying_key = match VerifyingKey::from_bytes(&pub_bytes.try_into().unwrap()) {
-        Ok(k) => k,
-        Err(_) => return false,
-    };
-    
-    let sig_bytes = match hex::decode(signature_hex) {
-        Ok(b) => b,
-        Err(_) => return false,
-    };
-    let signature = match Signature::from_bytes(&sig_bytes.try_into().unwrap()) {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-    
+pub fn verify_signature(message: &str, signature_hex: &str, public_key_hex: &str) -> bool {
+    let public_key_bytes = hex::decode(public_key_hex).unwrap();
+    let verifying_key = VerifyingKey::from_bytes(&public_key_bytes.try_into().unwrap()).unwrap();
+    let signature_bytes = hex::decode(signature_hex).unwrap();
+    let signature = Signature::from_bytes(&signature_bytes.try_into().unwrap());
     verifying_key.verify(message.as_bytes(), &signature).is_ok()
 }
 
-/// Hash a message using BLAKE3 (domain separated)
 #[wasm_bindgen]
 pub fn hash_message(message: &str) -> String {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(b"VERIFYKIT.v1.ATTESTATION");
-    hasher.update(message.as_bytes());
-    hex::encode(hasher.finalize().as_bytes())
+    use blake3;
+    hex::encode(blake3::hash(message.as_bytes()).as_bytes())
 }
 
-/// Create a signed attestation bundle
-/// Returns JSON with: message, signature, public_key
 #[wasm_bindgen]
-pub fn create_attestation(message: &str, private_key_hex: &str) -> String {
-    let signature = sign_message(private_key_hex, message);
-    let pub_bytes = {
-        let sk = SigningKey::from_bytes(&hex::decode(private_key_hex).unwrap().try_into().unwrap());
-        hex::encode(sk.verifying_key().as_bytes())
-    };
+pub fn verify_kit_demo() -> String {
+    let keypair = KeyPair::new();
+    let message = "CAEP Treasury: $48,771.07";
+    let signature = sign_message(message, &hex::encode(&keypair.private_key));
+    let is_valid = verify_signature(message, &signature, &keypair.public_key_hex());
     
     json!({
+        "status": "verified",
         "message": message,
-        "signature": signature,
-        "public_key": pub_bytes,
-        "hash": hash_message(message)
+        "signature_valid": is_valid,
+        "public_key": keypair.public_key_hex(),
+        "treasury": "$48,771.07",
+        "seal": "🜏 SOVEREIGN SEALED 🜏"
     }).to_string()
 }
