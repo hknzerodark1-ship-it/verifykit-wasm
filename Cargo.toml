@@ -7,9 +7,15 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-verifykit-core = { path = "../core" }
 wasm-bindgen = "0.2"
+ed25519-dalek = "2.1"
+rand = "0.8"
 serde_json = "1.0"
+hex = "0.4"
+blake3 = "1.5"
 
 [package.metadata.wasm-pack]
 wasm-opt = false
+
+[dependencies]
+getrandom = { version = "0.2", features = ["js"] }

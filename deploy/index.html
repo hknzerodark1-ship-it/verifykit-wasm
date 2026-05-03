@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VerifyKit - Cryptographic Verifier</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ffcc;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            border: 2px solid #00ffcc;
+            padding: 30px;
+            border-radius: 10px;
+            background: #0f0f0f;
+        }
+        h1 { text-align: center; margin-top: 0; }
+        input, textarea, button {
+            padding: 12px;
+            margin: 10px 0;
+            background: #1a1a1a;
+            border: 1px solid #00ffcc;
+            color: #00ffcc;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        input, textarea { width: calc(100% - 26px); }
+        button { 
+            cursor: pointer; 
+            width: 100%;
+            font-weight: bold;
+        }
+        button:hover:not(:disabled) { background: #00ffcc22; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .output {
+            background: #1a1a1a;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            word-break: break-all;
+            font-size: 12px;
+        }
+        .status {
+            font-size: 12px;
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .status.loading { background: #00ffcc22; color: #00ffcc; }
+        .status.ready { background: #00aa4422; color: #00ff88; }
+        .status.error { background: #ff003322; color: #ff6666; }
+        hr { border-color: #00ffcc33; }
+        .flex-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .flex-row button { width: auto; margin: 0; }
+        small { color: #00ffcc88; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔐 VerifyKit Cryptographic Verifier</h1>
+    <p>Enter any text to compute its Blake3 cryptographic hash:</p>
+    <textarea id="input" rows="3" placeholder="Enter text here..."></textarea>
+    <div class="flex-row">
+        <button id="computeBtn">Compute Blake3 Hash</button>
+        <button id="copyBtn" disabled>📋 Copy Hash</button>
+    </div>
+    <div class="output" id="output">Ready</div>
+    <div class="output" id="metrics" style="font-size: 11px;"></div>
+    <hr>
+    <div class="status loading" id="status">⏳ Loading WASM verifier...</div>
+</div>
+
+<script type="module">
+    // Robust path handling for GitHub Pages
+    const base = new URL('.', import.meta.url);
+    const wasmUrl = new URL('./pkg/verifykit_wasm_bg.wasm', base);
+    
+    let wasmReady = false;
+    let currentHash = '';
+    
+    // DOM elements
+    const statusDiv = document.getElementById('status');
+    const outputDiv = document.getElementById('output');
+    const metricsDiv = document.getElementById('metrics');
+    const computeBtn = document.getElementById('computeBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const inputField = document.getElementById('input');
+    
+    // Helper: HTML escaping
+    function escapeHtml(str) {
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+    
+    // Helper: Copy to clipboard
+    async function copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            copyBtn.textContent = '✅ Copied!';
+            setTimeout(() => { copyBtn.textContent = '📋 Copy Hash'; }, 2000);
+        } catch (err) {
+            copyBtn.textContent = '❌ Failed';
+            setTimeout(() => { copyBtn.textContent = '📋 Copy Hash'; }, 2000);
+        }
+    }
+    
+    // Main hash computation function (no window global)
+    async function computeHash() {
+        if (!wasmReady) {
+            outputDiv.innerHTML = '⏳ WASM still loading. Please wait...';
+            return;
+        }
+        
+        const input = inputField.value;
+        if (!input || input.trim() === '') {
+            outputDiv.innerHTML = '⚠️ Please enter some text to hash.';
+            metricsDiv.innerHTML = '';
+            copyBtn.disabled = true;
+            return;
+        }
+        
+        // Show loading state
+        outputDiv.innerHTML = '⏳ Computing hash...';
+        computeBtn.disabled = true;
+        
+        try {
+            // Measure performance
+            const start = performance.now();
+            
+            // Import WASM functions (lazy load inside compute to avoid module caching issues)
+            const module = await import('./pkg/verifykit_wasm.js');
+            await module.default({ module_or_path: wasmUrl });
+            
+            const hash = module.hash_input(input);
+            const end = performance.now();
+            const duration = (end - start).toFixed(2);
+            
+            currentHash = hash;
+            
+            // Display with input length and performance metrics
+            const inputBytes = new TextEncoder().encode(input).length;
+            outputDiv.innerHTML = `
+                <b>Input:</b><br>${escapeHtml(input)}<br><br>
+                <b>Blake3 Hash (64 bytes):</b><br>${hash}
+            `;
+            metricsDiv.innerHTML = `
+                📊 Input length: ${input.length} chars (${inputBytes} bytes)<br>
+                ⚡ Computation time: ${duration} ms
+            `;
+            
+            computeBtn.disabled = false;
+            copyBtn.disabled = false;
+            
+        } catch (err) {
+            outputDiv.innerHTML = `❌ Error: ${err.message}`;
+            metricsDiv.innerHTML = '';
+            computeBtn.disabled = false;
+            copyBtn.disabled = true;
+            console.error('Hash computation error:', err);
+        }
+    }
+    
+    // Copy handler
+    async function handleCopy() {
+        if (currentHash) {
+            await copyToClipboard(currentHash);
+        }
+    }
+    
+    // Load WASM on page load
+    async function loadWasm() {
+        try {
+            statusDiv.textContent = '⏳ Initializing WASM module...';
+            statusDiv.className = 'status loading';
+            
+            // Universal wasm-bindgen init pattern (works across versions)
+            const module = await import('./pkg/verifykit_wasm.js');
+            
+            // Try the universal init pattern first (object with module_or_path)
+            if (module.default && typeof module.default === 'function') {
+                await module.default({ module_or_path: wasmUrl });
+            } else {
+                // Fallback to direct init
+                await module.default();
+            }
+            
+            // Test the module
+            const testHash = module.hash_input('test');
+            if (!testHash || testHash.length !== 64) {
+                throw new Error('WASM hash function returned invalid output');
+            }
+            
+            const version = module.hello ? module.hello() : 'VerifyKit WASM';
+            statusDiv.innerHTML = `✅ ${version}`;
+            statusDiv.className = 'status ready';
+            outputDiv.innerHTML = 'Ready. Enter text and click "Compute Blake3 Hash".';
+            wasmReady = true;
+            
+            // Enable compute button (already enabled, but ensure)
+            computeBtn.disabled = false;
+            computeBtn.style.opacity = '1';
+            
+        } catch (err) {
+            statusDiv.innerHTML = `❌ WASM failed to load: ${err.message}`;
+            statusDiv.className = 'status error';
+            outputDiv.innerHTML = `Error: ${err.message}<br><br>Check browser console for details.`;
+            metricsDiv.innerHTML = '';
+            console.error('WASM loading error:', err);
+            wasmReady = false;
+            computeBtn.disabled = true;
+        }
+    }
+    
+    // Event binding (clean, no global pollution)
+    computeBtn.onclick = computeHash;
+    copyBtn.onclick = handleCopy;
+    
+    // Enter key support
+    inputField.onkeypress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            computeHash();
+        }
+    };
+    
+    // Disable copy button initially
+    copyBtn.disabled = true;
+    
+    // Start loading
+    loadWasm();
+</script>
+</body>
+</html>
